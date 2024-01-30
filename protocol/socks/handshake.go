@@ -180,11 +180,12 @@ func HandleConnection0(ctx context.Context, conn net.Conn, version byte, authent
 		if err != nil {
 			return err
 		}
+		from4 := netip.AddrFrom4([4]byte{0, 0, 0, 0})
 		switch request.Command {
 		case socks5.CommandConnect:
 			err = socks5.WriteResponse(conn, socks5.Response{
 				ReplyCode: socks5.ReplyCodeSuccess,
-				Bind:      request.Destination,
+				Bind:      M.SocksaddrFrom(from4, 443),
 			})
 			if err != nil {
 				return err
