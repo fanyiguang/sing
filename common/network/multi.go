@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"github.com/sagernet/sing/common/format"
 	"net"
 	"net/netip"
 	"time"
@@ -25,6 +26,9 @@ func DialSerial(ctx context.Context, dialer Dialer, network string, destination 
 		if err != nil {
 			connErrors = append(connErrors, err)
 			continue
+		}
+		if valuePtr, ok := ctx.Value("used-address").(*string); ok {
+			*valuePtr = net.JoinHostPort(address.String(), format.ToString(destination.Port))
 		}
 		return conn, nil
 	}
