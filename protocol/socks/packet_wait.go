@@ -37,12 +37,12 @@ func (w *AssociatePacketReadWaiter) WaitReadPacket() (buffer *buf.Buffer, destin
 		buffer.Release()
 		return nil, M.Socksaddr{}, ErrInvalidPacket
 	}
+	w.conn.remoteAddr = destination
 	buffer.Advance(3)
 	destination, err = M.SocksaddrSerializer.ReadAddrPort(buffer)
 	if err != nil {
 		buffer.Release()
 		return nil, M.Socksaddr{}, err
 	}
-	w.conn.remoteAddr = destination
 	return
 }
