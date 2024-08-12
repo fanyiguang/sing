@@ -57,7 +57,7 @@ var (
 
 type UnbindPacketConn struct {
 	N.ExtendedConn
-	addr M.Socksaddr
+	Addr M.Socksaddr
 }
 
 func NewUnbindPacketConn(conn net.Conn) N.NetPacketConn {
@@ -77,7 +77,7 @@ func NewUnbindPacketConnWithAddr(conn net.Conn, addr M.Socksaddr) N.NetPacketCon
 func (c *UnbindPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	n, err = c.ExtendedConn.Read(p)
 	if err == nil {
-		addr = c.addr.UDPAddr()
+		addr = c.Addr.UDPAddr()
 	}
 	return
 }
@@ -91,7 +91,7 @@ func (c *UnbindPacketConn) ReadPacket(buffer *buf.Buffer) (destination M.Socksad
 	if err != nil {
 		return
 	}
-	destination = c.addr
+	destination = c.Addr
 	return
 }
 
@@ -104,7 +104,7 @@ func (c *UnbindPacketConn) CreateReadWaiter() (N.PacketReadWaiter, bool) {
 	if !isReadWaiter {
 		return nil, false
 	}
-	return &UnbindPacketReadWaiter{readWaiter, c.addr}, true
+	return &UnbindPacketReadWaiter{readWaiter, c.Addr}, true
 }
 
 func (c *UnbindPacketConn) Upstream() any {
