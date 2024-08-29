@@ -51,20 +51,24 @@ func ParseVersion(version string) (Version, error) {
 var _ N.Dialer = (*Client)(nil)
 
 type Client struct {
-	version    Version
-	dialer     N.Dialer
-	serverAddr M.Socksaddr
-	username   string
-	password   string
+	version        Version
+	dialer         N.Dialer
+	originalDialer N.Dialer
+	serverAddr     M.Socksaddr
+	username       string
+	password       string
+	tls            bool
 }
 
-func NewClient(dialer N.Dialer, serverAddr M.Socksaddr, version Version, username string, password string) *Client {
+func NewClient(dialer, originalDialer N.Dialer, serverAddr M.Socksaddr, version Version, username string, password string, tls bool) *Client {
 	return &Client{
-		version:    version,
-		dialer:     dialer,
-		serverAddr: serverAddr,
-		username:   username,
-		password:   password,
+		version:        version,
+		dialer:         dialer,
+		originalDialer: originalDialer,
+		serverAddr:     serverAddr,
+		username:       username,
+		password:       password,
+		tls:            tls,
 	}
 }
 
@@ -143,12 +147,21 @@ func (c *Client) DialContext(ctx context.Context, network string, address M.Sock
 		if command == socks5.CommandConnect {
 			return tcpConn, nil
 		}
-		udpConn, err := c.dialer.DialContext(ctx, N.NetworkUDP, response.Bind)
-		if err != nil {
-			tcpConn.Close()
-			return nil, err
+		if c.tls {
+			udpConn, err := c.originalDialer.DialContext(ctx, N.NetworkUDP, response.Bind)
+			if err != nil {
+				tcpConn.Close()
+				return nil, err
+			}
+			return NewAssociatePacketConn(bufio.NewUnbindPacketConn(udpConn), address, tcpConn), nil
+		} else {
+			udpConn, err := c.dialer.DialContext(ctx, N.NetworkUDP, response.Bind)
+			if err != nil {
+				tcpConn.Close()
+				return nil, err
+			}
+			return NewAssociatePacketConn(bufio.NewUnbindPacketConn(udpConn), address, tcpConn), nil
 		}
-		return NewAssociatePacketConn(bufio.NewUnbindPacketConn(udpConn), address, tcpConn), nil
 	}
 	return nil, os.ErrInvalid
 }
