@@ -104,42 +104,43 @@ func HandleConnection(ctx context.Context, conn net.Conn, authenticator *auth.Au
 func HandleConnection0(ctx context.Context, conn net.Conn, version byte, authenticator *auth.Authenticator, handler Handler, metadata M.Metadata) error {
 	switch version {
 	case socks4.Version:
-		request, err := socks4.ReadRequest0(conn)
-		if err != nil {
-			return err
-		}
-		switch request.Command {
-		case socks4.CommandConnect:
-			if authenticator != nil && !authenticator.Verify(request.Username, "") {
-				err = socks4.WriteResponse(conn, socks4.Response{
-					ReplyCode:   socks4.ReplyCodeRejectedOrFailed,
-					Destination: request.Destination,
-				})
-				if err != nil {
-					return err
-				}
-				return E.New("socks4: authentication failed, username=", request.Username)
-			}
-			err = socks4.WriteResponse(conn, socks4.Response{
-				ReplyCode:   socks4.ReplyCodeGranted,
-				Destination: M.SocksaddrFromNet(conn.LocalAddr()),
-			})
-			if err != nil {
-				return err
-			}
-			metadata.Protocol = "socks4"
-			metadata.Destination = request.Destination
-			return handler.NewConnection(auth.ContextWithUser(ctx, request.Username), conn, metadata)
-		default:
-			err = socks4.WriteResponse(conn, socks4.Response{
-				ReplyCode:   socks4.ReplyCodeRejectedOrFailed,
-				Destination: request.Destination,
-			})
-			if err != nil {
-				return err
-			}
-			return E.New("socks4: unsupported command ", request.Command)
-		}
+		return E.New("socks4: unsupported")
+		// request, err := socks4.ReadRequest0(conn)
+		// if err != nil {
+		// 	return err
+		// }
+		// switch request.Command {
+		// case socks4.CommandConnect:
+		// 	if authenticator != nil && !authenticator.Verify(request.Username, "") {
+		// 		err = socks4.WriteResponse(conn, socks4.Response{
+		// 			ReplyCode:   socks4.ReplyCodeRejectedOrFailed,
+		// 			Destination: request.Destination,
+		// 		})
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 		return E.New("socks4: authentication failed, username=", request.Username)
+		// 	}
+		// 	err = socks4.WriteResponse(conn, socks4.Response{
+		// 		ReplyCode:   socks4.ReplyCodeGranted,
+		// 		Destination: M.SocksaddrFromNet(conn.LocalAddr()),
+		// 	})
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	metadata.Protocol = "socks4"
+		// 	metadata.Destination = request.Destination
+		// 	return handler.NewConnection(auth.ContextWithUser(ctx, request.Username), conn, metadata)
+		// default:
+		// 	err = socks4.WriteResponse(conn, socks4.Response{
+		// 		ReplyCode:   socks4.ReplyCodeRejectedOrFailed,
+		// 		Destination: request.Destination,
+		// 	})
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	return E.New("socks4: unsupported command ", request.Command)
+		// }
 	case socks5.Version:
 		authRequest, err := socks5.ReadAuthRequest0(conn)
 		if err != nil {
