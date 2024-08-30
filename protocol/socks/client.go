@@ -58,9 +58,10 @@ type Client struct {
 	username       string
 	password       string
 	tls            bool
+	useServerAddr  bool
 }
 
-func NewClient(dialer, originalDialer N.Dialer, serverAddr M.Socksaddr, version Version, username string, password string, tls bool) *Client {
+func NewClient(dialer, originalDialer N.Dialer, serverAddr M.Socksaddr, version Version, username string, password string, tls, useServerAddr bool) *Client {
 	return &Client{
 		version:        version,
 		dialer:         dialer,
@@ -69,6 +70,7 @@ func NewClient(dialer, originalDialer N.Dialer, serverAddr M.Socksaddr, version 
 		username:       username,
 		password:       password,
 		tls:            tls,
+		useServerAddr:  useServerAddr,
 	}
 }
 
@@ -146,6 +148,9 @@ func (c *Client) DialContext(ctx context.Context, network string, address M.Sock
 		}
 		if command == socks5.CommandConnect {
 			return tcpConn, nil
+		}
+		if c.useServerAddr {
+			response.Bind = c.serverAddr
 		}
 		if c.tls {
 			udpConn, err := c.originalDialer.DialContext(ctx, N.NetworkUDP, response.Bind)
