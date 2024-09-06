@@ -42,14 +42,14 @@ func ClientHandshake4(conn io.ReadWriter, command byte, destination M.Socksaddr,
 }
 
 func ClientHandshake5(conn io.ReadWriter, command byte, destination M.Socksaddr, username string, password string) (socks5.Response, error) {
-	var method byte
+	var methods []byte
 	if username == "" {
-		method = socks5.AuthTypeNotRequired
+		methods = []byte{socks5.AuthTypeNotRequired}
 	} else {
-		method = socks5.AuthTypeUsernamePassword
+		methods = []byte{socks5.AuthTypeNotRequired, socks5.AuthTypeUsernamePassword}
 	}
 	err := socks5.WriteAuthRequest(conn, socks5.AuthRequest{
-		Methods: []byte{method},
+		Methods: methods,
 	})
 	if err != nil {
 		return socks5.Response{}, err
