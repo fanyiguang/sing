@@ -4,25 +4,25 @@ import (
 	std_bufio "bufio"
 	"context"
 	"encoding/base64"
-	"net"
-	"net/http"
-	"strings"
-
 	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/atomic"
 	"github.com/sagernet/sing/common/auth"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
 	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/pipe"
+	"net"
+	"net/http"
+	"strings"
+
+	N "github.com/sagernet/sing/common/network"
 )
 
 type Handler = N.TCPConnectionHandler
 
 func HandleConnection(ctx context.Context, conn net.Conn, reader *std_bufio.Reader, authenticator *auth.Authenticator, handler Handler, metadata M.Metadata) error {
-	var httpClient *http.Client
 	for {
 		request, err := ReadRequest(reader)
 		if err != nil {
@@ -30,20 +30,39 @@ func HandleConnection(ctx context.Context, conn net.Conn, reader *std_bufio.Read
 		}
 
 		if authenticator != nil {
-			var authOk bool
+			var (
+				username string
+				password string
+				authOk   bool
+			)
 			authorization := request.Header.Get("Proxy-Authorization")
 			if strings.HasPrefix(authorization, "Basic ") {
 				userPassword, _ := base64.URLEncoding.DecodeString(authorization[6:])
 				userPswdArr := strings.SplitN(string(userPassword), ":", 2)
-				authOk = authenticator.Verify(userPswdArr[0], userPswdArr[1])
-				if authOk {
-					ctx = auth.ContextWithUser(ctx, userPswdArr[0])
+				if len(userPswdArr) == 2 {
+					username = userPswdArr[0]
+					password = userPswdArr[1]
+					authOk = authenticator.Verify(username, password)
+					if authOk {
+						ctx = auth.ContextWithUser(ctx, userPswdArr[0])
+					}
 				}
 			}
 			if !authOk {
-				err = responseWith(request, http.StatusProxyAuthRequired).Write(conn)
+				// Since no one else is using the library, use a fixed realm until rewritten
+				err = responseWith(
+					request, http.StatusProxyAuthRequired,
+					"Proxy-Authenticate", `Basic realm="sing-box" charset="UTF-8"`,
+				).Write(conn)
 				if err != nil {
 					return err
+				}
+				if username != "" {
+					return E.New("http: authentication failed, username=", username, ", password=", password)
+				} else if authorization != "" {
+					return E.New("http: authentication failed, Proxy-Authorization=", authorization)
+				} else {
+					return E.New("http: authentication failed, no Proxy-Authorization header")
 				}
 			}
 		}
@@ -95,35 +114,33 @@ func HandleConnection(ctx context.Context, conn net.Conn, reader *std_bufio.Read
 			return responseWith(request, http.StatusBadRequest).Write(conn)
 		}
 
-		var innerErr error
-		if httpClient == nil {
-			httpClient = &http.Client{
-				Transport: &http.Transport{
-					DisableCompression: true,
-					DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-						metadata.Destination = M.ParseSocksaddr(address)
-						metadata.Protocol = "http"
-						input, output := pipe.Pipe()
-						go func() {
-							hErr := handler.NewConnection(ctx, output, metadata)
-							if hErr != nil {
-								innerErr = hErr
-								common.Close(input, output)
-							}
-						}()
-						return input, nil
-					},
+		var innerErr atomic.TypedValue[error]
+		httpClient := &http.Client{
+			Transport: &http.Transport{
+				DisableCompression: true,
+				DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+					metadata.Destination = M.ParseSocksaddr(address)
+					metadata.Protocol = "http"
+					input, output := pipe.Pipe()
+					go func() {
+						hErr := handler.NewConnection(ctx, output, metadata)
+						if hErr != nil {
+							innerErr.Store(hErr)
+							common.Close(input, output)
+						}
+					}()
+					return input, nil
 				},
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			}
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		}
 		requestCtx, cancel := context.WithCancel(ctx)
 		response, err := httpClient.Do(request.WithContext(requestCtx))
 		if err != nil {
 			cancel()
-			return E.Errors(innerErr, err, responseWith(request, http.StatusBadGateway).Write(conn))
+			return E.Errors(innerErr.Load(), err, responseWith(request, http.StatusBadGateway).Write(conn))
 		}
 
 		removeHopByHopHeaders(response.Header)
@@ -139,11 +156,10 @@ func HandleConnection(ctx context.Context, conn net.Conn, reader *std_bufio.Read
 		err = response.Write(conn)
 		if err != nil {
 			cancel()
-			return E.Errors(innerErr, err)
+			return E.Errors(innerErr.Load(), err)
 		}
 
 		cancel()
-
 		if !keepAlive {
 			return conn.Close()
 		}
@@ -187,13 +203,20 @@ func removeExtraHTTPHostPort(req *http.Request) {
 	req.URL.Host = host
 }
 
-func responseWith(request *http.Request, statusCode int) *http.Response {
+func responseWith(request *http.Request, statusCode int, headers ...string) *http.Response {
+	var header http.Header
+	if len(headers) > 0 {
+		header = make(http.Header)
+		for i := 0; i < len(headers); i += 2 {
+			header.Add(headers[i], headers[i+1])
+		}
+	}
 	return &http.Response{
 		StatusCode: statusCode,
 		Status:     http.StatusText(statusCode),
 		Proto:      request.Proto,
 		ProtoMajor: request.ProtoMajor,
 		ProtoMinor: request.ProtoMinor,
-		Header:     http.Header{},
+		Header:     header,
 	}
 }
