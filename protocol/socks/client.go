@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -118,6 +119,14 @@ func (c *Client) DialContext(ctx context.Context, network string, address M.Sock
 	if err != nil {
 		return nil, err
 	}
+	err = tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
+	if err != nil {
+		tcpConn.Close()
+		return nil, err
+	}
+	defer func() {
+		_ = tcpConn.SetDeadline(time.Time{})
+	}()
 	if c.version == Version4 && address.IsFqdn() {
 		tcpAddr, err := net.ResolveTCPAddr(network, address.String())
 		if err != nil {
