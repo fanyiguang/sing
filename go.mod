@@ -3,6 +3,7 @@ module github.com/sagernet/sing
 go 1.18
 
 require (
+	github.com/fanyiguang/brick v0.0.0-20241226023402-689b2031c0e7
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/sys v0.15.0
 )
